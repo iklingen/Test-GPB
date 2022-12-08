@@ -25,7 +25,7 @@ $ curl -L https://cpanmin.us | perl - -M https://cpan.metacpan.org -n Mojoliciou
 
 По окончании работы, скрипт выдает некоторую статистическую информацию. Например, для использованного в качестве примера лога:
 ```
-$ perl load-mainlog.pl test-data/out
+$ perl load-mainlog.pl -e test-data/out
 Lines read            10000
 Records parsed        7057
 Records processed     7057
