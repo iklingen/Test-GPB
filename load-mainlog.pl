@@ -1,5 +1,6 @@
 #!/usr/bin/env perl
 use strict;
+use Getopt::Long;
 use DBI qw(:sql_types);
 
 use constant DB_SERVICE => 'IT1';
@@ -14,22 +15,48 @@ use constant VALID_FLAG => {
     '==' => 1,
 };
 
-my ( $line_count, $record_count, $empty_id_count, $wrong_count, %ADDRESS, %INT_ID, %FLAG );
+my %Opt = (
+    'print-stats'  => 1,
+    'print-emails' => 0,
+    'warn-flag'    => 0,
+    'warn-email'   => 0,
+    'warn-id'      => 0,
+);
+GetOptions( \%Opt, 'print-stats|stats|s!', 'print-emails|emails|e!',
+    'warn-flag|wf!', 'warn-email|we!', 'warn-id|wi!' );
+
+my ( $line_count, $record_count, $empty_id_count, $wrong_count, %ADDRESS,
+    %INT_ID, %FLAG );
+
+my %counts;
 
 while (<>) {
     chomp;
 
     my $line = $_;
-    $line_count += 1;
+    $counts{'lines'} += 1;
 
     my ( $date,   $time, $str )   = split / /, $line, 3;
     my ( $int_id, $flag, $other ) = split / /, $str,  3;
 
-    next if $int_id =~ /Start|End/i;
-    next unless VALID_FLAG->{$flag};
+    if ( $int_id =~ /Start|End/i || $flag eq 'Completed' ) {
+        $counts{'unessential'} += 1;
+        next;
+    }
 
-    # extract raw email address with maybe next ' foo=' and skip lines with a wrong emails
-    next unless $other =~ m/^(.+?@.+?(=|$))/;
+    unless ( VALID_FLAG->{$flag} ) {
+        warn "F $line\n" if $Opt{'warn-flag'};
+        $counts{'wrong-flag'} += 1;
+        next;
+    }
+
+    # extract raw email address with maybe followed ' foo=' and skip lines with a wrong email
+    unless ( $other =~ m/^(.+?@.+?(=|$))/ ) {
+        warn "E $line\n" if $Opt{'warn-email'};
+        $counts{'wrong-email'} += 1;
+        next;
+    }
+
     my $address = $1;
 
     # remove possible tail ' foo='
@@ -49,19 +76,23 @@ while (<>) {
 
     # 'id=' is mandatory only for '<=' records
     unless ( $id || $flag ne '<=' ) {
-        $empty_id_count += 1;
+        warn "I $line\n" if $Opt{'warn-id'};
+        $counts{'wrong-id'} += 1;
         next;
     }
 
-    $record_count += 1;
+    $counts{'parsed'} += 1;
 
     $ADDRESS{$address}{$flag} += 1;
     $INT_ID{$int_id}          += 1;
     $FLAG{$flag}              += 1;
 
-    unless ( db_store( $date, $time, $int_id, $id, $flag, $address, $str ) ) {
-        $wrong_count += 1;
-        warn "*** Line number $line_count\n*** $line\n\n";
+    if ( db_store( $date, $time, $int_id, $id, $flag, $address, $str ) ) {
+        $counts{'processed'} += 1;
+    }
+    else {
+        $counts{'wrong-db'} += 1;
+        warn "*** Line number $counts{'lines'}\n*** $line\n\n";
     }
 }
 
@@ -72,23 +103,39 @@ for ( values %INT_ID ) {
     $max_chain_count = $_ if $_ > $max_chain_count;
 }
 
-print "Lines read            $line_count\n";
-print "Records parsed        $record_count\n";
-print "Wrong records count   ", $wrong_count + 0,     "\n";
-print "Records with w/o id   ", $empty_id_count + 0,  "\n";
-print "Unique emails count   ", scalar keys %ADDRESS, "\n";
-print "Unique chains count   ", scalar keys %INT_ID,  "\n";
-print "Max chain count       $max_chain_count\n";
+for (
+    qw(lines parsed processed unessential wrong-flag wrong-email wrong-id wrong-db )
+  )
+{
+    $counts{$_} += 0;
+}
 
-print "Flags counts:\n";
-for ( sort keys %FLAG ) { print "  '$_' : $FLAG{$_}\n" }
+if ( $Opt{'print-stats'} ) {
+    print "Lines read            $counts{'lines'}\n";
+    print "Records parsed        $counts{'parsed'}\n";
+    print "Records processed     $counts{'processed'}\n\n";
+    print "Unessential skipped   $counts{'unessential'}\n";
+    print "Wrong flag  rejected  $counts{'wrong-flag'}\n";
+    print "Wrong email rejected  $counts{'wrong-email'}\n";
+    print "Empty id    rejected  $counts{'wrong-id'}\n";
+    print "DB error    rejected  $counts{'wrong-db'}\n\n";
+    print "Unique emails count   ", scalar keys %ADDRESS, "\n";
+    print "Unique chains count   ", scalar keys %INT_ID,  "\n";
+    print "Max chain count       $max_chain_count\n";
 
-print "Emails:\n";
-for my $addr ( sort keys %ADDRESS ) {
-    print "  $addr\t => {",
-      join( ', ',
-        map { "'$_' : $ADDRESS{$addr}{$_}" } sort keys %{ $ADDRESS{$addr} } ),
-      "}\n";
+    print "Flags counts:\n";
+    for ( sort keys %FLAG ) { print "  '$_' : $FLAG{$_}\n" }
+}
+
+if ( $Opt{'print-emails'} ) {
+    print "Emails:\n";
+    for my $addr ( sort keys %ADDRESS ) {
+        print "  $addr\t => {",
+          join( ', ',
+            map { "'$_' : $ADDRESS{$addr}{$_}" }
+            sort keys %{ $ADDRESS{$addr} } ),
+          "}\n";
+    }
 }
 
 exit;
@@ -116,6 +163,7 @@ exit;
             );
         };
         if ($@) {
+
             # do not insert data
             $skip  = 1;
             $error = 1;
@@ -164,4 +212,3 @@ exit;
     }
 
 }
-

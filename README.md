@@ -28,8 +28,14 @@ $ curl -L https://cpanmin.us | perl - -M https://cpan.metacpan.org -n Mojoliciou
 $ perl load-mainlog.pl test-data/out
 Lines read            10000
 Records parsed        7057
-Wrong records count   0
-Records with w/o id   0
+Records processed     7057
+
+Unessential skipped   1475
+Wrong flag  rejected  1108
+Wrong email rejected  360
+Empty id    rejected  0
+DB error    rejected  0
+
 Unique emails count   648
 Unique chains count   2394
 Max chain count       11
@@ -40,12 +46,19 @@ Flags counts:
   '==' : 3069
   '=>' : 1910
 Emails:
-  aaqvjvgq@vinsk.nov.su	 => {'==' : 1}
-  absmqd@tech-success.ru	 => {'==' : 2, '=>' : 2}
+  aaqvjvgq@vinsk.nov.su    => {'==' : 1}
+  absmqd@tech-success.ru   => {'==' : 2, '=>' : 2}
   . . .
-  zzgjjl@mail.ru	 => {'==' : 2, '=>' : 2}
-  zzlwpvr@gmail.com	 => {'==' : 1, '=>' : 1}
+  zzgjjl@mail.ru     => {'==' : 2, '=>' : 2}
+  zzlwpvr@gmail.com  => {'==' : 1, '=>' : 1}
 ```
+
+Скрипт допускает следующие опции:
+- --_[no[-]]_ print-stats  | stats  | -s -- (on), печатать статистику на stdout;
+- --_[no[-]]_ print-emails | emails | -e -- (off), печатать список найденных почтовых адресов на stdout;
+- --_[no[-]]_ warn-flag  | wf -- (off), печатать записи с неверными флагами на stderr (префикс 'F ...');
+- --_[no[-]]_ warn-email | we -- (off), печатать записи с неверными почтовыми адресами на stderr (префикс 'E ...');
+- --_[no[-]]_ warn-id    | wi -- (off), печатать записи с отсутствующими, но необходимыми id=... на stderr (префикс 'I ...).
 
 
 HTML-страница с поисковой формой
